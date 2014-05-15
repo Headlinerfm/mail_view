@@ -1,1 +1,3 @@
 /mail_view-*.gem
+.bundle
+bin/
