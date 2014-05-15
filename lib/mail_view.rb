@@ -23,6 +23,7 @@ class MailView
 
   def call(env)
     request = Rack::Request.new(env)
+    @params = request.params || {}
 
     if request.path_info == "" || request.path_info == "/"
       links = self.actions.map do |action|
@@ -110,7 +111,12 @@ class MailView
     end
 
     def part_body_url(part)
-      '?part=%s' % Rack::Utils.escape([part.main_type, part.sub_type].compact.join('/'))
+      part_query_string = '?part=%s' % Rack::Utils.escape([part.main_type, part.sub_type].compact.join('/'))
+      if @params.any?
+        part_query_string + '&' + Rack::Utils.build_query(@params)
+      else
+        part_query_string
+      end
     end
 
     def find_part(mail, matching_content_type)
@@ -126,4 +132,9 @@ class MailView
         mail
       end
     end
+
+    def params
+      @params
+    end
+
 end
