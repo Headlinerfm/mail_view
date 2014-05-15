@@ -107,6 +107,34 @@ class TestMailView < Test::Unit::TestCase
       mail.add_part container
       mail
     end
+
+    def message_with_params
+      greeting = params['greeting']
+      email = params['email']
+      Mail.new do
+        to "User <#{email}>"
+        from 'Test Peek <test@foo.com>'
+        body "#{greeting}"
+      end
+    end
+
+    def multipart_alternative_with_params
+      greeting = params['greeting']
+      Mail.new do
+        to 'josh@37signals.com'
+
+        yield self if block_given?
+
+        text_part do
+          body "Plain greeting #{greeting}"
+        end
+
+        html_part do
+          content_type 'text/html; charset=UTF-8'
+          body "<h1>Html greeting #{greeting}</h1>"
+        end
+      end
+    end
   end
 
   class ISayHelloAndYouSayGoodbyeInterceptor
@@ -131,8 +159,9 @@ class TestMailView < Test::Unit::TestCase
     Preview
   end
 
-  def iframe_src_match(content_type)
-    /<iframe[^>]* src="\?part=#{Regexp.escape(Rack::Utils.escape(content_type))}"[^>]*><\/iframe>/
+  def iframe_src_match(content_type, params = '')
+    params = '&' + Rack::Utils.build_query(Rack::Utils.parse_query(params)) if params != ''
+    /<iframe[^>]* src="\?part=#{Regexp.escape(Rack::Utils.escape(content_type)) + params}"[^>]*><\/iframe>/
   end
 
   def unescaped_body
@@ -304,6 +333,31 @@ class TestMailView < Test::Unit::TestCase
       get '/plain_text_message?part='
     end
     assert_equal 'Goodbye', last_response.body
+  end
+
+  def test_message_with_params
+    get '/message_with_params?greeting=Bonjour&email=user@blah.com'
+    assert last_response.ok?
+    assert_match 'user@blah.com', unescaped_body, "Email should be in body"
+    assert_match 'Bonjour', unescaped_body, "Greeting should be in body"
+  end
+
+  def test_message_with_params_no_part_url
+    get '/message_with_params?greeting=Bonjour&email=user@blah.com'
+    assert last_response.ok?
+    assert_match iframe_src_match('', '&greeting=Bonjour&email=user@blah.com'), last_response.body, "Iframe src should include params"
+  end
+
+  def test_message_multipart_alternative_plain_with_params
+    get '/multipart_alternative_with_params?part=text%2Fplain&greeting=Bonjour'
+    assert last_response.ok?
+    assert_match 'Plain greeting Bonjour', unescaped_body, "Email should be in body"
+  end
+
+  def test_message_multipart_alternative_html_with_params
+    get '/multipart_alternative_with_params?part=text%2Fhtml&greeting=Bonjour'
+    assert last_response.ok?
+    assert_match 'Html greeting Bonjour', unescaped_body, "Email should be in body"
   end
 
   unless RUBY_VERSION >= '1.9'
